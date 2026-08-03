@@ -9,6 +9,10 @@
   [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-yellow)](https://huggingface.co/collections/XiaomiRobotics/xiaomi-robotics-0)
   [![Post-Training](https://img.shields.io/badge/🛠️-Post--Training-orange)](xr0/)
   [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
+  [![Papers with Code: SOTA on CALVIN ABCD to D](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge.svg?eval=13807&live=1)](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge-link?eval=13807)
+  [![Papers with Code: SOTA on LIBERO-Object](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge.svg?eval=13803&live=1)](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge-link?eval=13803)
+  [![Papers with Code: #3 on CALVIN ABC→D](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge.svg?eval=13808&live=1)](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge-link?eval=13808)
+  [![Papers with Code: #3 on SimplerEnv Google Robot](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge.svg?eval=13810&live=1)](https://paperswithcode.co/api/v1/papers/2602.12684/leaderboard-badge-link?eval=13810)
 
 </div>
 
