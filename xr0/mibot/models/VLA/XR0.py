@@ -1,5 +1,6 @@
 # Copyright (C) 2026 Xiaomi Corporation.
 import math
+import os
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -439,8 +440,14 @@ class XR0(nn.Module):
     def _build_model(self) -> None:
         """Instantiate all sub-modules: VLM backbone, DiT head, projectors, and embeddings."""
         # VLM backbone
+        # Backbone attention impl: flash_attention_2 for training on H100 (sm_90); override to
+        # "sdpa" (env XR0_ATTN_IMPL=sdpa) for inference on GPUs without an sm_matching flash-attn
+        # build (e.g. RTX 4090 / sm_89). SDPA is exact attention -> no accuracy change. The DiT head
+        # already uses F.scaled_dot_product_attention, so sdpa here makes the whole model flash-free.
         self.vlm = Qwen3VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-4B-Instruct", attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            "Qwen/Qwen3-VL-4B-Instruct",
+            attn_implementation=os.environ.get("XR0_ATTN_IMPL", "flash_attention_2"),
+            dtype=torch.bfloat16,
         ).train()
         self.vlm.model.get_input_embeddings().requires_grad_(False)
         self.vlm.model.visual.gradient_checkpointing_enable()

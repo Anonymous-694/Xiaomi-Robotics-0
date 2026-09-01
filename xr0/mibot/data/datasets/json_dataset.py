@@ -41,6 +41,7 @@ class JsonDataset(Dataset):
         self.batch_size = int(data.get("batch_size", 16))
         self.max_samples = int(params.get("max_steps", 1000)) * self.batch_size * int(os.environ.get("WORLD_SIZE", 1))
         self.mean, self.std = validate_stats(data["mean"], data["std"], self.action_length)
+        self.active_parts = data.get("active_parts", None)
         self.files = self._json_files(data.get("train_path", []))
         self.samples = self._samples()
 
@@ -58,12 +59,13 @@ class JsonDataset(Dataset):
         prompt = self._prompt(traj)
         left = self._arm_action(traj, "left", frame, steps)
         right = self._arm_action(traj, "right", frame, steps)
-        action = compose_action(*left, *right, action_length=self.action_length)
+        waist = self._waist_action(traj, frame, steps)
+        action = compose_action(*left, *right, action_length=self.action_length, waist=waist)
 
         return {
             "messages": self._messages(prompt["conversations"], self._augment(self._images(traj, prompt["images"], frame))),
             "action": torch.from_numpy(normalize_action(action, self.mean, self.std)),
-            "action_mask": torch.from_numpy(build_action_mask(self.action_length, self._mask(traj, steps))),
+            "action_mask": torch.from_numpy(build_action_mask(self.action_length, self._mask(traj, steps), self.active_parts)),
             "state": torch.from_numpy(self._state(traj, frame)),
         }
 
@@ -202,6 +204,13 @@ class JsonDataset(Dataset):
             self._delta(traj, f"proprios.{arm}_arm_joint", f"actions.{arm}_arm_joint", frame, steps),
         )
 
+    def _waist_action(self, traj, frame, steps):
+        # Waist joint5 action = delta (target - current), same convention as the arm joints. Returns
+        # None for datasets without a waist_joint field (EEF-only route) so dim 13 stays zero.
+        if get_value(traj, "proprios.waist_joint") is None or get_value(traj, "actions.waist_joint") is None:
+            return None
+        return self._delta(traj, "proprios.waist_joint", "actions.waist_joint", frame, steps)
+
     def _delta(self, traj, current_key, target_key, frame, steps):
         return self._pad(self._future(traj, target_key, frame, steps) - self._frame(traj, current_key, frame), steps)
 
@@ -221,9 +230,21 @@ class JsonDataset(Dataset):
 
     @staticmethod
     def _state(traj, frame):
+        # The 6-DOF state slot holds the current EEF pose ([x,y,z,roll,pitch,yaw], base_link frame),
+        # written by the converter as proprios.{arm}_state_eef. Fall back to arm_joint (zeros) for
+        # older JSON produced before the EEF-state change.
+        def eef_state(arm):
+            value = get_value(traj, f"proprios.{arm}_state_eef")
+            if value is None:
+                value = get_value(traj, f"proprios.{arm}_arm_joint")
+            return np.asarray(value[frame], dtype=np.float32)
+
+        waist_val = get_value(traj, "proprios.waist_joint")
+        waist = np.asarray(waist_val[frame], dtype=np.float32) if waist_val is not None else None
         return compose_state(
             left_gripper=np.asarray(get_value(traj, "proprios.left_gripper_pos")[frame], dtype=np.float32),
-            left_joint=np.asarray(get_value(traj, "proprios.left_arm_joint")[frame], dtype=np.float32),
+            left_joint=eef_state("left"),
             right_gripper=np.asarray(get_value(traj, "proprios.right_gripper_pos")[frame], dtype=np.float32),
-            right_joint=np.asarray(get_value(traj, "proprios.right_arm_joint")[frame], dtype=np.float32),
+            right_joint=eef_state("right"),
+            waist=waist,
         )

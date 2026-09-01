@@ -115,6 +115,15 @@ To ensure the next chunk connects smoothly to the current one, the model takes t
 The model generates a full 30-step chunk conditioned on this prefix, so the beginning of the new chunk is consistent with the end of the previous one.
 The robot controller discards the first N actions that were already executed during the inference latency, and seamlessly continues from the N+1-th action. This mode requires an asynchronously trained checkpoint (`async_train: true`).
 
+### GenieSim G2 (simulation benchmark)
+
+To fine-tune XR-0 on the [GenieSim](https://github.com/AgibotTech/genie_sim) G2 omnipicker and evaluate it
+in-sim, see [`geniesim_deploy/README.md`](geniesim_deploy/README.md). It walks through the full pipeline —
+converting lerobot v2.1 datasets, computing norm stats, training with `data=g2op_if`, and launching the
+two-tier inference stack (`serve.sh`) that bridges the XR-0 model server to GenieSim's corobot protocol.
+The design rationale (EEF-space control, frame conventions, joint masking) is in
+[`geniesim_deploy/DESIGN_GENIESIM_SFT.md`](geniesim_deploy/DESIGN_GENIESIM_SFT.md).
+
 ## Training Data Format
 
 Each episode contains three synchronized video files (ego, wrist-left, and wrist-right) and a metadata JSON file.

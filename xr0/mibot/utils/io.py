@@ -21,6 +21,24 @@ ACTION_PARTS = (
     ("right_ee_aa", slice(17, 20)),
     ("right_gripper", slice(20, 21)),
     ("right_joint", slice(21, 27)),
+    # Waist joint (G2 idx05_body_joint5), a single independent joint DOF placed in the free dim 13
+    # (gap between left_joint end and right_ee_pos start). Supervised only when a config lists "waist"
+    # in active_parts; the EEF-only route leaves it zero + masked. Must stay LAST so
+    # compose_action's 8-value zip keeps aligning the arm parts.
+    ("waist", slice(13, 14)),
+)
+WAIST_SLICE = slice(13, 14)
+
+# GenieSim G2 EEF-control route (design §2/§6.2): supervise only the Cartesian EEF pose + gripper
+# channels; joint channels (7-12, 21-26) are masked out because G2 has 7-DOF arms that do not fit
+# XR-0's 6-DOF joint slots, and control is delegated to GenieSim's built-in IK.
+EEF_ACTIVE_PARTS = (
+    "left_ee_pos",
+    "left_ee_aa",
+    "left_gripper",
+    "right_ee_pos",
+    "right_ee_aa",
+    "right_gripper",
 )
 
 
@@ -128,10 +146,21 @@ def validate_stats(mean: Sequence[Sequence[float]], std: Sequence[Sequence[float
     return mean, std
 
 
-def build_action_mask(action_length: int, temporal_mask=None) -> np.ndarray:
+def build_action_mask(action_length: int, temporal_mask=None, active_parts=None) -> np.ndarray:
+    """Build a (action_length, ACTION_DIM) binary mask.
+
+    temporal_mask: per-timestep validity (1 valid / 0 padding-or-invalid). Defaults to all valid.
+    active_parts:  optional iterable of ACTION_PARTS names to supervise. When given, only those
+                   channels receive the temporal mask; every other channel stays 0 (unsupervised).
+                   None keeps the original behaviour of supervising all parts. Used by the GenieSim
+                   G2 EEF route to mask out the joint channels (7-12, 21-26) — see design §6.2.
+    """
     temporal = np.ones(action_length, dtype=np.int32) if temporal_mask is None else np.asarray(temporal_mask, dtype=np.int32)
+    selected = None if active_parts is None else set(active_parts)
     mask = np.zeros((action_length, ACTION_DIM), dtype=np.int32)
-    for _, slc in ACTION_PARTS:
+    for name, slc in ACTION_PARTS:
+        if selected is not None and name not in selected:
+            continue
         mask[:, slc] = temporal[:, None]
     return mask
 
@@ -146,22 +175,28 @@ def compose_action(
     right_gripper,
     right_joint,
     action_length: int,
+    waist=None,
 ) -> np.ndarray:
     values = (left_ee_pos, left_ee_aa, left_gripper, left_joint, right_ee_pos, right_ee_aa, right_gripper, right_joint)
     action = np.zeros((action_length, ACTION_DIM), dtype=np.float32)
-    for (_, slc), value in zip(ACTION_PARTS, values):
+    for (_, slc), value in zip(ACTION_PARTS, values):  # zip stops at the 8 arm parts; waist filled below
         action[:, slc] = np.asarray(value, dtype=np.float32)
+    if waist is not None:
+        action[:, WAIST_SLICE] = np.asarray(waist, dtype=np.float32).reshape(action_length, 1)
     return action
 
 
-def compose_state(left_gripper, left_joint, right_gripper, right_joint) -> np.ndarray:
+def compose_state(left_gripper, left_joint, right_gripper, right_joint, waist=None) -> np.ndarray:
     state = np.zeros((1, STATE_DIM), dtype=np.float32)
-    for slc, value in (
+    slots = [
         (slice(6, 7), left_gripper),
         (slice(7, 13), left_joint),
         (slice(20, 21), right_gripper),
         (slice(21, 27), right_joint),
-    ):
+    ]
+    if waist is not None:
+        slots.append((WAIST_SLICE, waist))
+    for slc, value in slots:
         state[:, slc] = np.asarray(value, dtype=np.float32).reshape(1, slc.stop - slc.start)
     return state
 

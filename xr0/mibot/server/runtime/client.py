@@ -67,12 +67,16 @@ class Client:
             padding=True,
             images_kwargs={"do_resize": False},
         )
+        # waist_joint (current joint5) is fed into state dim 13 only when present (manip route); for
+        # the EEF-only routes robot_state has no "waist_joint" -> compose_state leaves dim 13 zero.
+        waist = robot_state.get("waist_joint")
         payload["state"] = torch.from_numpy(
             compose_state(
                 left_gripper=np.asarray(robot_state["left_gripper_pos"], dtype=np.float32),
-                left_joint=np.asarray(robot_state["left_arm_joint"], dtype=np.float32),
+                left_joint=np.asarray(robot_state.get("left_state_eef", robot_state["left_arm_joint"]), dtype=np.float32),
                 right_gripper=np.asarray(robot_state["right_gripper_pos"], dtype=np.float32),
-                right_joint=np.asarray(robot_state["right_arm_joint"], dtype=np.float32),
+                right_joint=np.asarray(robot_state.get("right_state_eef", robot_state["right_arm_joint"]), dtype=np.float32),
+                waist=None if waist is None else np.asarray(waist, dtype=np.float32),
             )
         )[None]
 
